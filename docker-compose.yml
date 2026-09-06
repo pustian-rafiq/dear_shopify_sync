@@ -75,12 +75,15 @@ services:
       celery:
         condition: service_started
 
-  # Internal only — OLD app nginx owns public 80/443 and proxies here.
+  # OLD app nginx proxies here via host.docker.internal:8080 (docker bridge
+  # gateway 172.17.0.1). Must NOT bind only 127.0.0.1 or old nginx gets
+  # "connection refused". Keep public 80/443 on the OLD nginx; firewall
+  # host port 8080 if you want it closed to the internet (ufw deny 8080).
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8080:80"
+      - "8080:80"
     volumes:
       - ./nginx:/etc/nginx/conf.d:ro
       - staticfiles:/opt/staticfiles:ro
