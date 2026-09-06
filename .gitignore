@@ -10,6 +10,7 @@ Project_Default.xml
 .idea/workspace.xml
 .idea/
 .env
+deploy/job_configurations.json
 db.sqlite3
 venv
 reports/dear_cost_sync/*.csv
