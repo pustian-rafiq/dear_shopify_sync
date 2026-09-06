@@ -1,0 +1,9 @@
+{% extends "admin/change_form.html" %}
+
+{% block submit_buttons_bottom %}
+    {% if not is_popup and not change %}
+        <div class="submit-row">
+            <input type="submit" value="Save" class="default" name="_save">
+        </div>
+    {% endif %}
+{% endblock %}

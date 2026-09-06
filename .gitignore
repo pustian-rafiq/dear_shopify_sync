@@ -1,0 +1,16 @@
+*.pyc
+__pycache__/
+media/
+logs/
+mediafiles/
+staticfiles/
+static_assets/
+Project_Default.xml
+.idea/vcs.xml
+.idea/workspace.xml
+.idea/
+.env
+db.sqlite3
+venv
+reports/dear_cost_sync/*.csv
+!reports/dear_cost_sync/.gitkeep

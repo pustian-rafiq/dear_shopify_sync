@@ -1,0 +1,96 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dear_to_shopify:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    expose:
+      - "5000"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - staticfiles:/opt/app/static/static_root
+      - mediafiles:/opt/app/media
+      - reports:/opt/app/reports
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A dear_to_shopify worker -l info --concurrency=4
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - reports:/opt/app/reports
+      - mediafiles:/opt/app/media
+    depends_on:
+      redis:
+        condition: service_healthy
+      dear_to_shopify:
+        condition: service_started
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      celery -A dear_to_shopify beat -l info
+      --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - reports:/opt/app/reports
+    depends_on:
+      redis:
+        condition: service_healthy
+      celery:
+        condition: service_started
+
+  # Internal only — OLD app nginx owns public 80/443 and proxies here.
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./nginx:/etc/nginx/conf.d:ro
+      - staticfiles:/opt/staticfiles:ro
+      - mediafiles:/opt/mediafiles:ro
+    depends_on:
+      - dear_to_shopify
+    command: '/bin/sh -c ''while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g "daemon off;"'''
+
+volumes:
+  staticfiles:
+  mediafiles:
+  reports:
+  redis_data:

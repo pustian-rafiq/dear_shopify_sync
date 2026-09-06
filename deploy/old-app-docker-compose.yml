@@ -1,0 +1,84 @@
+version: "3"
+
+services:
+  redis:
+    image: "redis:alpine"
+    restart: "on-failure"
+    ports:
+      - 6379
+    network_mode: "bridge"
+
+  inventory_to_logistic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    expose:
+      - 5000
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - staticfiles:/opt/app/static/static_root
+      - mediafiles:/opt/app/media/
+      - .:/opt/app
+      - ./csv_storage:/opt/app/csv_storage
+      - ./certbot/conf:/etc/letsencrypt
+
+  nginx:
+    image: nginx:mainline-alpine
+    restart: always
+    command: '/bin/sh -c ''while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g "daemon off;"'''
+    ports:
+      - "80:80"
+      - "443:443"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+      - certbot_challenges:/var/www/.well-known/acme-challenge
+      - staticfiles:/opt/staticfiles
+      - mediafiles:/opt/mediafiles
+    depends_on:
+      - "inventory_to_logistic"
+
+  certbot:
+    image: certbot/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+      - certbot_challenges:/var/www/.well-known/acme-challenge
+    command: certonly -v --dry-run --webroot --webroot-path=/var/www
+      --preferred-challenges http-01 --email shahnewaz@sgcsoft.net
+      --agree-tos --no-eff-email --non-interactive --force-renewal
+      -d f4ip.com -d www.f4ip.com
+
+  celery:
+    build: .
+    command: celery -A inventory_to_logistic_setup worker -l info
+    restart: "on-failure"
+    network_mode: "bridge"
+    links:
+      - "redis"
+    depends_on:
+      - "redis"
+
+  celery-beat:
+    build: .
+    command: celery -A inventory_to_logistic_setup beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    restart: "on-failure"
+    network_mode: "bridge"
+    links:
+      - "redis"
+    depends_on:
+      - "redis"
+      - "celery"
+      - "nginx"
+
+volumes:
+  staticfiles:
+  mediafiles:
+  certbot_challenges:

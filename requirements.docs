@@ -1,0 +1,322 @@
+Act as a senior Python integration architect and production software engineer with at least 10 years of experience building ERP, e-commerce, API, database, scheduling, and cloud integrations. Build a production-ready Python application that synchronises product cost from DEAR Inventory, also known as Cin7 Core, to Shopify at variant level. Do not guess any API behaviour, schema, authentication method, mutation structure, pagination behaviour, email configuration, or deployment command. If an important detail is missing or ambiguous, ask a blocking question before generating implementation code.
+PROJECT OBJECTIVE
+
+Build a one-way integration: DEAR Inventory Product AverageCost | v DEAR SKU | v Shopify variant SKU | v Shopify InventoryItem cost The integration must:
+
+    Retrieve all active products from DEAR Inventory.
+    Use the DEAR Product endpoint with full pagination.
+    Read the DEAR fields:
+        ID
+        SKU
+        Name
+        Status
+        AverageCost
+        LastModifiedOn
+    Filter to products where Status equals "Active".
+    Use AverageCost as the source cost.
+    Round AverageCost to exactly two decimal places using Decimal and ROUND_HALF_UP.
+    Match DEAR SKU exactly to Shopify variant SKU.
+    Retrieve the Shopify inventory item ID for each matching variant.
+    Read the current Shopify inventory item cost.
+    Update Shopify only when the normalised cost is different.
+    Skip and log all ambiguous or invalid records.
+    Generate an audit and reconciliation report.
+    Email the report.
+    Run on a Linux-based DigitalOcean Droplet using Python virtualenv and Linux cron.
+    Remain developable and testable from a Windows PC. This is a single-DEAR-company and single-Shopify-store implementation. ================================================== CONFIRMED BUSINESS RULES ================================================== Source system:
+
+    DEAR Inventory / Cin7 Core. DEAR API base URL: https://inventory.dearsystems.com/externalapi/v2/ DEAR Product endpoint: GET /Product DEAR authentication headers:
+    api-auth-accountid
+    api-auth-applicationkey DEAR pagination:
+    Use page and limit query parameters.
+    Make the page size configurable.
+    Default to a safe configurable value.
+    Do not assume that one response contains all products.
+    Continue until all records have been retrieved based on the documented response and returned record count.
+    Process the Total value where available.
+    Detect repeated pages or invalid pagination to avoid infinite loops. DEAR product model:
+    Each returned record represents one standalone product/variant.
+    There is no nested parent-product variant array for this implementation.
+    Each product has a unique SKU.
+    The example product contains: SKU: 9359825092556 AverageCost: 62.963 Status: Active Cost rules:
+    Source field: AverageCost.
+    Currency: USD.
+    DEAR and Shopify currencies will not differ.
+    Round the cost to two decimal places.
+    Use Python Decimal, not float.
+    Use ROUND_HALF_UP.
+    Example: AverageCost 62.963 becomes 62.96.
+    Preserve the normalised value as a decimal string when sending it to Shopify. Shopify matching:
+    Match DEAR SKU exactly to Shopify variant SKU.
+    SKU matching is case-sensitive unless explicitly configured otherwise.
+    Do not trim, transform, normalise, or infer a SKU unless the behaviour is explicitly configured.
+    If the SKU is missing, skip and log it.
+    If no Shopify variant matches, skip and log it.
+    If multiple Shopify variants match, skip and log it as an ambiguous match.
+    Never guess a match.
+    Do not update selling price, compare-at price, title, barcode, inventory quantity, or any other Shopify field. Shopify API:
+    Use Shopify Admin GraphQL API.
+    API version: 2026-07.
+    Endpoint: https://{SHOPIFY_STORE_DOMAIN}/admin/api/2026-07/graphql.json
+    Use the X-Shopify-Access-Token header.
+    Use Content-Type: application/json.
+    The application must support the Shopify permissions required to read inventory item cost and update inventory item cost.
+    Fail clearly if Shopify returns an access or permission error.
+    Do not log access tokens. Use this tested variant lookup concept: query GetVariantsByMultipleSkus($query: String!) { productVariants(first: 50, query: $query) { nodes { id sku title inventoryItem { id sku unitCost { amount currencyCode } } product { id title } } } } Implement cursor pagination where supported and include pageInfo in the actual query. Do not assume that first: 50 retrieves every possible result. Construct Shopify SKU search expressions safely. Escape or reject SKU values that could alter the Shopify search expression. Make the batch size configurable. If a batch query is unreliable because of query length or API limitations, use smaller batches or individual SKU lookup. Do not silently drop SKUs. For cost updates, use the verified Shopify GraphQL mutation shape for the selected API version: mutation InventoryItemUpdate($id: ID!, $input: InventoryItemInput!) { inventoryItemUpdate(id: $id, input: $input) { inventoryItem { id unitCost { amount currencyCode } } userErrors { field message } } } Use variables similar to: { "id": "gid://shopify/InventoryItem/123456789", "input": { "cost": "62.96" } } Important:
+    The input field for writing cost is cost.
+    The output field for reading cost is unitCost.amount.
+    Do not use unitCost as an input field.
+    Do not use MoneyInput for the inventory item cost update unless schema introspection for Shopify API version 2026-07 proves that it is required.
+    Validate the schema or use the official Shopify API documentation before finalising the mutation.
+    Handle top-level GraphQL errors and mutation userErrors separately.
+    Treat any userErrors as a failed update. ================================================== SCHEDULE REQUIREMENTS ================================================== Daily job:
+    Retrieve all active DEAR products using full pagination.
+    Match products to Shopify variants.
+    Compare normalised DEAR AverageCost against Shopify inventory item unitCost.
+    Update changed costs only.
+    Produce a daily CSV reconciliation report.
+    Email the report.
+    Include counts for:
+        DEAR products retrieved
+        Active products
+        Invalid products
+        Products missing SKU
+        Shopify matches
+        Shopify missing matches
+        Duplicate Shopify matches
+        Costs unchanged
+        Costs changed
+        Successful updates
+        Failed updates
+        Skipped records
+        API errors
+        Runtime
+    The daily process must be safe to rerun. Weekly job:
+    Implement a separate weekly command and cron wrapper.
+    The weekly job must perform a full reconciliation.
+    Do not guess the weekly cron day or time.
+    Make the weekly day and time configurable through configuration.
+    Before generating the final cron file, ask me to confirm the weekly day and time if it is not supplied.
+    Make the weekly job behaviour configurable as either:
+        Reconciliation and automatic correction, or
+        Reconciliation report only.
+    Do not silently assume which weekly behaviour is required. Timezone:
+    The required daily execution time is 2:00 AM Los Angeles time.
+    Use the IANA timezone: America/Los_Angeles
+    Do not hard-code UTC-7 permanently because the application must handle the configured timezone correctly.
+    Do not rely on the DigitalOcean server’s local timezone without documenting the configuration.
+    Generate a cron configuration that is explicitly timezone-aware where the installed cron implementation supports it.
+    Otherwise provide a safe documented alternative and clearly state the operational requirement. ================================================== CONFIGURATION REQUIREMENTS ================================================== Use two configuration files.
+
+    .env for secrets: DEAR_ACCOUNT_ID= DEAR_APPLICATION_KEY= SHOPIFY_STORE_DOMAIN= SHOPIFY_ACCESS_TOKEN= SMTP_HOST= SMTP_PORT= SMTP_USERNAME= SMTP_PASSWORD= EMAIL_FROM= EMAIL_TO=
+    config.yaml for non-secret configuration: app: environment: development timezone: America/Los_Angeles log_level: INFO dear: base_url: https://inventory.dearsystems.com/externalapi/v2 product_endpoint: Product page_size: 1000 request_timeout_seconds: 30 max_retries: 5 rate_limit_per_minute: 60 shopify: api_version: "2026-07" currency: USD variant_query_batch_size: 50 request_timeout_seconds: 30 max_retries: 5 sync: source_cost_field: AverageCost decimal_places: 2 rounding_mode: ROUND_HALF_UP tolerance: "0.00" dry_run: true max_updates_per_run: 0 single_sku_mode: false single_sku: "" include_inactive_products: false reports: output_directory: reports attach_csv: true include_unchanged_records: false database: path: data/sync.sqlite3 email: enabled: false send_on_success: true send_on_failure: true send_empty_report: true cron: daily_schedule: "0 2 * * *" weekly_schedule: "" weekly_mode: "reconciliation_only" Rules:
+
+    Secrets must never be stored in config.yaml.
+    Include .env.example with empty placeholders.
+    Include .gitignore covering .env, database files, logs, reports, virtualenvs, caches, and IDE files.
+    Validate all required configuration at application startup.
+    Fail with a clear message when a required secret is missing.
+    Never print secrets in exceptions or logs.
+    Allow configuration values to be overridden by command-line arguments where appropriate. ================================================== SAFETY REQUIREMENTS ================================================== The default mode must be dry-run. The application must not perform live Shopify updates unless explicitly enabled. Support these command examples: python -m app.main daily python -m app.main daily --dry-run python -m app.main daily --live python -m app.main daily --sku 9359825092556 --dry-run python -m app.main daily --sku 9359825092556 --live python -m app.main weekly --dry-run python -m app.main report --run-id RUN_ID Recommended live-update protection:
+    config.yaml dry_run defaults to true.
+    --live must explicitly disable dry-run.
+    A maximum update limit must be configurable.
+    If max_updates_per_run is greater than zero, stop after that number of updates.
+    Display a clear summary before live execution begins.
+    Do not require an interactive prompt when running under cron.
+    Do not perform any update if configuration validation fails. Single-SKU mode:
+    Must support testing one SKU.
+    Must still perform exact matching.
+    Must still read and compare the existing Shopify cost.
+    Must still honour dry-run.
+    Must still write an audit record. ================================================== DATABASE REQUIREMENTS ================================================== Use SQLite. Create the database automatically on first run. Include schema migration or initialisation logic. Suggested tables: runs:
+    id
+    run_type
+    started_at_utc
+    completed_at_utc
+    status
+    dry_run
+    records_retrieved
+    records_processed
+    records_updated
+    records_failed
+    records_skipped
+    report_path
+    error_message sync_records:
+    id
+    run_id
+    dear_product_id
+    sku
+    dear_name
+    dear_status
+    dear_average_cost
+    normalised_dear_cost
+    shopify_variant_id
+    shopify_inventory_item_id
+    shopify_product_id
+    shopify_product_title
+    previous_shopify_cost
+    shopify_currency
+    action
+    result
+    error_code
+    error_message
+    processed_at_utc configuration or state table:
+    key
+    value
+    updated_at_utc Use transactions. Make the sync idempotent:
+    A rerun with the same DEAR cost must not produce another Shopify update.
+    Only changed values should be updated.
+    Store enough audit information to explain every skipped, unchanged, successful, and failed record.
+    Prevent two sync jobs from running simultaneously.
+    Implement a cross-platform lock using SQLite or another clearly justified method. ================================================== API RELIABILITY REQUIREMENTS ================================================== DEAR:
+    Use a persistent HTTP session.
+    Add a User-Agent identifying the integration.
+    Use request timeouts.
+    Retry network errors, timeouts, HTTP 429, and temporary 5xx errors.
+    Use exponential backoff with jitter.
+    Respect the documented DEAR rate limit.
+    Do not retry validation errors or authentication errors indefinitely.
+    Capture HTTP status and a safe error message. Shopify:
+    Use a persistent HTTP session.
+    Handle HTTP 429 and 5xx errors.
+    Handle GraphQL top-level errors.
+    Handle mutation userErrors.
+    Respect Shopify throttling information where available.
+    Retry only safe read operations automatically.
+    For update operations, ensure the operation is idempotent before retrying.
+    After an update retry, re-query the inventory item to verify the final value.
+    Never treat an HTTP 200 response as a successful mutation if userErrors are present. ================================================== REPORT REQUIREMENTS ================================================== Generate both:
+
+    Human-readable summary.
+    Detailed CSV report. The CSV must include at least:
+
+    Run ID
+    Run type
+    Timestamp
+    DEAR product ID
+    SKU
+    DEAR product name
+    DEAR status
+    Original AverageCost
+    Normalised DEAR cost
+    Shopify variant ID
+    Shopify inventory item ID
+    Shopify product ID
+    Shopify product title
+    Previous Shopify cost
+    New Shopify cost
+    Currency
+    Action
+    Result
+    Error code
+    Error message Use UTC timestamps in the database and ISO 8601 timestamps in reports. Email:
+    Implement generic SMTP support.
+    Do not hard-code Gmail, Microsoft 365, Amazon SES, or another provider.
+    Read SMTP settings from environment variables.
+    Support TLS.
+    Support an HTML or plain-text summary.
+    Attach the CSV when configured.
+    Send an email on failed runs.
+    Do not fail the entire synchronisation merely because the report email failed; record the email failure separately.
+    Ask for the SMTP provider details only if they are required to produce provider-specific deployment instructions. ================================================== LOGGING REQUIREMENTS ================================================== Use Python logging. Write logs to a configurable log directory. Use:
+    Console logging for manual execution.
+    Rotating file logging for cron execution.
+    Configurable maximum file size.
+    Configurable backup count.
+    Structured or consistently formatted log messages. Every run must log:
+    Start and end time.
+    Run type.
+    Dry-run status.
+    Configuration validation result.
+    DEAR page progress.
+    Shopify query progress.
+    Number of products retrieved.
+    Number of updates attempted.
+    Number of successful updates.
+    Number of failures.
+    Number of skipped records.
+    Report location.
+    Email result.
+    Final run status. Never log:
+    API keys.
+    Shopify access tokens.
+    SMTP passwords.
+    Full request headers containing secrets. ================================================== PROJECT STRUCTURE ================================================== Generate a complete project with a structure similar to: dear_shopify_cost_sync/ ├── app/ │ ├── init.py │ ├── main.py │ ├── main.py │ ├── settings.py │ ├── logging_config.py │ ├── models.py │ ├── database.py │ ├── locking.py │ ├── decimal_utils.py │ ├── dear_client.py │ ├── shopify_client.py │ ├── sync_service.py │ ├── reconciliation.py │ ├── reporting.py │ ├── email_service.py │ └── exceptions.py ├── tests/ │ ├── test_decimal_utils.py │ ├── test_dear_client.py │ ├── test_shopify_client.py │ ├── test_matching.py │ ├── test_sync_service.py │ ├── test_reporting.py │ └── fixtures/ ├── cron/ │ ├── run_daily.sh │ ├── run_weekly.sh │ └── dear-shopify-cost-sync.cron.example ├── config/ │ └── config.example.yaml ├── data/ ├── logs/ ├── reports/ ├── .env.example ├── .gitignore ├── requirements.txt ├── pyproject.toml ├── README.md └── DEPLOYMENT.md You may improve this structure if there is a strong reason. Explain the reason. ================================================== WINDOWS DEVELOPMENT REQUIREMENTS ================================================== The project will be developed on Windows and deployed to Linux. Requirements:
+    Use pathlib instead of hard-coded path separators.
+    Do not use Linux-only commands inside Python.
+    Do not assume /var, /opt, /home, or systemd paths in application code.
+    Keep cron shell scripts separate from Python.
+    Provide Windows PowerShell setup commands.
+    Provide Windows test commands.
+    Provide Linux deployment commands separately.
+    Ensure tests can run on Windows.
+    Use environment variables and configuration paths that work on both platforms.
+    Do not commit .env or access credentials. ================================================== DIGITALOCEAN DEPLOYMENT REQUIREMENTS ================================================== Assume a Linux-based DigitalOcean Droplet, but do not guess the Linux distribution version. Ask me to confirm the operating system and Python version before producing OS-specific commands. Provide:
+    Python virtualenv setup.
+    Dependency installation.
+    Directory permissions.
+    Configuration installation.
+    .env installation.
+    Database initialisation.
+    Manual dry-run command.
+    Manual single-SKU test.
+    Manual live command.
+    Cron installation.
+    Cron log redirection.
+    Log rotation instructions.
+    Backup instructions for SQLite.
+    Rollback instructions.
+    Health-check or last-run verification command.
+    How to disable cron safely.
+    How to run the weekly reconciliation manually. The cron wrappers must:
+    Use the configured virtualenv.
+    Use absolute paths generated from a configurable application directory.
+    Load the correct environment.
+    Write a PID or lock-safe execution.
+    Return a non-zero exit code on application failure.
+    Avoid overlapping daily and weekly jobs.
+    Not expose secrets in the process list. ================================================== TESTING REQUIREMENTS ================================================== Use pytest. Include unit tests for:
+    AverageCost conversion.
+    Decimal rounding.
+    Null and invalid cost values.
+    SKU matching.
+    Missing SKU.
+    Missing Shopify variant.
+    Duplicate Shopify variants.
+    Unchanged cost.
+    Changed cost.
+    Dry-run behaviour.
+    Maximum update limit.
+    DEAR pagination.
+    Shopify pagination.
+    DEAR 429 handling.
+    Shopify 429 handling.
+    GraphQL top-level errors.
+    Shopify mutation userErrors.
+    Email failure handling.
+    SQLite audit records.
+    Report generation. Use mocked HTTP responses. Tests must never call production DEAR or Shopify endpoints. Include sample fixtures based on this DEAR product: { "ID": "1367ec5e-2d77-467b-b5b4-4ebb7f2e349c", "SKU": "9359825092556", "Name": "Duke Soft White/Silver-9.5", "Status": "Active", "AverageCost": 62.963, "LastModifiedOn": "2026-07-21T19:10:02.633Z" } Expected normalised cost: 62.96 ================================================== OUTPUT FORMAT ================================================== Before writing code:
+
+    List all assumptions.
+    List all unresolved blocking questions.
+    Do not silently make assumptions.
+    Ask only questions that genuinely prevent a production-safe implementation.
+    If no blocking questions remain, proceed. Then provide:
+    Final architecture.
+    Data flow.
+    Project file tree.
+    Complete contents of every file.
+    Database schema.
+    GraphQL queries and mutations.
+    Configuration examples.
+    Windows development instructions.
+    Linux DigitalOcean deployment instructions.
+    Cron configuration.
+    Testing instructions.
+    Operational runbook.
+    Security checklist.
+    Example dry-run output.
+    Example live-run output.
+    Known limitations.
+    Acceptance test checklist. Do not provide pseudocode. Do not omit required files. Do not use placeholder functions such as "implement here". Do not leave TODO comments for core functionality. Do not invent undocumented DEAR or Shopify API parameters. Do not use floating-point arithmetic for money. Do not include credentials in code or examples. Do not use REST Shopify APIs unless you explain why GraphQL cannot satisfy the requirement.

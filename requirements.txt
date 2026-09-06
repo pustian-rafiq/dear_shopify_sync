@@ -1,0 +1,23 @@
+# Django 5.2 LTS (security support through April 2028)
+# Compatible with Python 3.10–3.14 (Dockerfile: 3.10; local 3.12 OK)
+
+Django==5.2.17
+
+# Admin / UI (used in INSTALLED_APPS)
+django-admin-interface==0.32.0
+django-colorfield==0.14.0
+django-cors-headers==4.9.0
+django-import-export==4.4.1
+django-admin-rangefilter==0.15.0
+Pillow==12.3.0
+
+# Celery / Beat / broker
+celery==5.5.3
+django-celery-beat==2.8.1
+redis==5.2.1
+
+# Server / DB / config / HTTP
+gunicorn==23.0.0
+psycopg2-binary==2.9.10
+python-decouple==3.8
+requests==2.32.5
