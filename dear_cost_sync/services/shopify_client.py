@@ -37,7 +37,7 @@ query GetVariantsBySku($query: String!, $first: Int!, $after: String) {
         sku
         unitCost { amount currencyCode }
       }
-      product { id title }
+      product { id title status }
     }
     pageInfo { hasNextPage endCursor }
   }
@@ -110,6 +110,8 @@ class ShopifyClient:
         while True:
             attempt += 1
             try:
+                print("executing query with variables:", variables)
+                print("executing query:", query)
                 resp = self.session.post(
                     self.endpoint,
                     json={"query": query, "variables": variables},
@@ -183,6 +185,7 @@ class ShopifyClient:
                 raise ShopifyGraphQLError(
                     "Shopify GraphQL response missing 'data'", status_code=200
                 )
+            print("Shopify GraphQL response data:", data)
             return data
 
     def _maybe_retry(
@@ -234,17 +237,20 @@ class ShopifyClient:
                 retry=True,
             )
             conn = data["productVariants"]
+            print("product variants", conn)
             for node in conn["nodes"]:
                 inv = node.get("inventoryItem") or {}
                 unit = (inv.get("unitCost") or {}) if inv else {}
                 amount = unit.get("amount")
+                product = node.get("product") or {}
                 yield ShopifyVariant(
                     variant_id=node["id"],
                     sku=node.get("sku"),
                     variant_title=node.get("title"),
                     inventory_item_id=inv.get("id"),
-                    product_id=(node.get("product") or {}).get("id"),
-                    product_title=(node.get("product") or {}).get("title"),
+                    product_id=product.get("id"),
+                    product_title=product.get("title"),
+                    product_status=product.get("status"),
                     unit_cost_amount=(to_decimal(amount) if amount is not None else None),
                     unit_cost_currency=unit.get("currencyCode"),
                 )

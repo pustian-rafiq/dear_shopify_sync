@@ -286,6 +286,7 @@ class CostSyncTaskMixin:
                         if r.shopify_product_title
                         else None
                     ),
+                    shopify_product_status=r.shopify_product_status,
                     previous_shopify_cost=r.previous_shopify_cost,
                     new_shopify_cost=r.new_shopify_cost,
                     shopify_currency=r.shopify_currency,

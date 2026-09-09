@@ -82,6 +82,7 @@ class CostSyncRecordAdmin(ExportActionMixin, admin.ModelAdmin):
         "sku",
         "run",
         "dear_name",
+        "shopify_product_status",
         "normalised_dear_cost",
         "previous_shopify_cost",
         "new_shopify_cost",
@@ -95,6 +96,7 @@ class CostSyncRecordAdmin(ExportActionMixin, admin.ModelAdmin):
         "action",
         "result",
         "error_code",
+        "shopify_product_status",
         ("created_at", DateRangeFilter),
     ]
     search_fields = [
@@ -103,6 +105,7 @@ class CostSyncRecordAdmin(ExportActionMixin, admin.ModelAdmin):
         "dear_name",
         "shopify_variant_id",
         "shopify_inventory_item_id",
+        "shopify_product_status",
         "error_message",
     ]
     readonly_fields = [
@@ -118,6 +121,7 @@ class CostSyncRecordAdmin(ExportActionMixin, admin.ModelAdmin):
         "shopify_inventory_item_id",
         "shopify_product_id",
         "shopify_product_title",
+        "shopify_product_status",
         "previous_shopify_cost",
         "new_shopify_cost",
         "shopify_currency",

@@ -76,6 +76,7 @@ class CostSyncRecord(BaseModel):
     shopify_inventory_item_id = models.CharField(max_length=100, null=True, blank=True)
     shopify_product_id = models.CharField(max_length=100, null=True, blank=True)
     shopify_product_title = models.CharField(max_length=500, null=True, blank=True)
+    shopify_product_status = models.CharField(max_length=50, null=True, blank=True)
     previous_shopify_cost = models.CharField(max_length=50, null=True, blank=True)
     new_shopify_cost = models.CharField(max_length=50, null=True, blank=True)
     shopify_currency = models.CharField(max_length=10, null=True, blank=True)

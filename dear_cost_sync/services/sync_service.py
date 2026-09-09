@@ -19,6 +19,7 @@ from dear_cost_sync.services.domain import (
     DearProduct,
     Result,
     RunCounters,
+    SHOPIFY_ELIGIBLE_PRODUCT_STATUSES,
     ShopifyVariant,
     SyncRecord,
 )
@@ -73,7 +74,7 @@ class SyncService:
         logger.info("Retrieved %s DEAR products", len(products))
 
         eligible: list[tuple[DearProduct, str, Decimal]] = []
-        for product in products:
+        for product in products[:100]:
             record = self._new_record(product)
 
             if self.opts.single_sku is not None and product.sku != self.opts.single_sku:
@@ -155,6 +156,18 @@ class SyncService:
             variant = matches[0]
             counters.shopify_matches += 1
             self._fill_variant(record, variant)
+
+            shopify_status = (variant.product_status or "").strip().upper()
+            if shopify_status not in SHOPIFY_ELIGIBLE_PRODUCT_STATUSES:
+                counters.skipped_records += 1
+                self._mark_skip(
+                    record,
+                    "SHOPIFY_PRODUCT_STATUS",
+                    f"Shopify product status={variant.product_status!r} "
+                    f"not in {sorted(SHOPIFY_ELIGIBLE_PRODUCT_STATUSES)}",
+                )
+                records.append(record)
+                continue
 
             if not variant.inventory_item_id:
                 counters.skipped_records += 1
@@ -263,6 +276,7 @@ class SyncService:
         record.shopify_inventory_item_id = variant.inventory_item_id
         record.shopify_product_id = variant.product_id
         record.shopify_product_title = variant.product_title
+        record.shopify_product_status = variant.product_status
         if variant.unit_cost_currency:
             record.shopify_currency = variant.unit_cost_currency
 

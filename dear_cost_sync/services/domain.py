@@ -43,6 +43,10 @@ class DearProduct:
         )
 
 
+# Shopify Product.status values we allow cost updates for.
+SHOPIFY_ELIGIBLE_PRODUCT_STATUSES = frozenset({"ACTIVE", "DRAFT"})
+
+
 @dataclass
 class ShopifyVariant:
     variant_id: str
@@ -51,6 +55,7 @@ class ShopifyVariant:
     inventory_item_id: str
     product_id: Optional[str]
     product_title: Optional[str]
+    product_status: Optional[str]
     unit_cost_amount: Optional[Decimal]
     unit_cost_currency: Optional[str]
 
@@ -67,6 +72,7 @@ class SyncRecord:
     shopify_inventory_item_id: Optional[str] = None
     shopify_product_id: Optional[str] = None
     shopify_product_title: Optional[str] = None
+    shopify_product_status: Optional[str] = None
     previous_shopify_cost: Optional[str] = None
     new_shopify_cost: Optional[str] = None
     shopify_currency: Optional[str] = None

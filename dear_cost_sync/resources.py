@@ -19,6 +19,7 @@ class CostSyncRecordResource(resources.ModelResource):
             "shopify_inventory_item_id",
             "shopify_product_id",
             "shopify_product_title",
+            "shopify_product_status",
             "previous_shopify_cost",
             "new_shopify_cost",
             "shopify_currency",
