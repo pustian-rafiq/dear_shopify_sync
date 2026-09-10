@@ -74,7 +74,7 @@ class SyncService:
         logger.info("Retrieved %s DEAR products", len(products))
 
         eligible: list[tuple[DearProduct, str, Decimal]] = []
-        for product in products[:100]:
+        for product in products:
             record = self._new_record(product)
 
             if self.opts.single_sku is not None and product.sku != self.opts.single_sku:
